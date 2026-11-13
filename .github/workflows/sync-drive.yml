@@ -1,0 +1,41 @@
+name: Sync Arcade Engine Staging from Google Drive
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # Polls Drive staging folder every 15 minutes
+  workflow_dispatch:       # Allows manual or webhook-triggered instant sync
+
+permissions:
+  contents: write
+
+jobs:
+  sync-drive-to-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitHub Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rclone
+        uses: AnimMouse/setup-rclone@v1
+        with:
+          rclone_config: ${{ secrets.RCLONE_DRIVE_CONFIG }}
+
+      - name: Mirror Arcade-Engine-Staging Folder
+        run: |
+          rclone copy "gdrive:Arcade-Engine-Staging" ./ \
+            --exclude "sync-drive.yml" \
+            --drive-export-formats txt,md \
+            --verbose
+
+      - name: Commit & Push Changes to Main (Triggers Cloudflare Pages)
+        run: |
+          git config user.name "Arcade Engine Bot"
+          git config user.email "bot@arcade-engine.dev"
+          git add .
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(sync): auto-sync updates from Arcade-Engine-Staging"
+            git push origin main
+          else
+            echo "No new changes in Drive staging folder."
+          fi
+
